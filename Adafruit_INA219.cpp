@@ -24,11 +24,9 @@
  *
  */
 
-#include "Arduino.h"
-
-#include <Wire.h>
-
 #include "Adafruit_INA219.h"
+#include "api_debug.h"
+#include "api_os.h"
 
 /*!
  *  @brief  Sends a single command byte over I2C
@@ -37,12 +35,17 @@
  *  @param  value
  *          value to write
  */
-void Adafruit_INA219::wireWriteRegister(uint8_t reg, uint16_t value) {
-  _i2c->beginTransmission(ina219_i2caddr);
-  _i2c->write(reg);                 // Register
-  _i2c->write((value >> 8) & 0xFF); // Upper 8-bits
-  _i2c->write(value & 0xFF);        // Lower 8-bits
-  _i2c->endTransmission();
+void Adafruit_INA219::wireWriteRegister(const uint8_t reg, const uint16_t value) {
+  uint8_t data[3] = {
+    reg,                 // Register
+    (value >> 8) & 0xFF, // Upper 8-bits
+    value & 0xFF         // Lower 8-bits
+  };
+  I2C_Error_t error = I2C_Transmit(_i2c, ina219_i2caddr, &data[0], 3, I2C_DEFAULT_TIME_OUT);
+  if (error != I2C_ERROR_NONE)
+  {
+    Trace(1, "Adafruit_INA219::wireWriteRegister transmit error: 0X%02x", error);
+  }
 }
 
 /*!
@@ -53,16 +56,23 @@ void Adafruit_INA219::wireWriteRegister(uint8_t reg, uint16_t value) {
  *          read value
  */
 void Adafruit_INA219::wireReadRegister(uint8_t reg, uint16_t *value) {
+  I2C_Error_t error = I2C_Transmit(_i2c, ina219_i2caddr, &reg, 1, I2C_DEFAULT_TIME_OUT);
+  if (error != I2C_ERROR_NONE)
+  {
+    Trace(1, "Adafruit_INA219::wireReadRegister transmit error: 0X%02x", error);
+  }
 
-  _i2c->beginTransmission(ina219_i2caddr);
-  _i2c->write(reg); // Register
-  _i2c->endTransmission();
+  OS_Sleep(1); // Max 12-bit conversion time is 586us per sample
 
-  delay(1); // Max 12-bit conversion time is 586us per sample
+  uint8_t res[2];
+  error = I2C_Receive(_i2c, ina219_i2caddr, &res[0], 2, I2C_DEFAULT_TIME_OUT);
+  if (error != I2C_ERROR_NONE)
+  {
+    Trace(1, "Adafruit_INA219::wireReadRegister recieve error: 0X%02x", error);
+  }
 
-  _i2c->requestFrom(ina219_i2caddr, (uint8_t)2);
   // Shift values to create properly formed integer
-  *value = ((_i2c->read() << 8) | _i2c->read());
+  *value = ((res[0] << 8) | res[1]);
 }
 
 /*!
@@ -161,9 +171,9 @@ void Adafruit_INA219::powerSave(bool on) {
   wireReadRegister(INA219_REG_CONFIG, &current);
   uint8_t next;
   if (on) {
-    next = current | INA219_CONFIG_MODE_POWERDOWN; 
+    next = current | INA219_CONFIG_MODE_POWERDOWN;
   } else {
-    next = current & ~INA219_CONFIG_MODE_POWERDOWN; 
+    next = current & ~INA219_CONFIG_MODE_POWERDOWN;
   }
   wireWriteRegister(INA219_REG_CONFIG, next);
 }
@@ -358,10 +368,9 @@ Adafruit_INA219::Adafruit_INA219(uint8_t addr) {
 
 /*!
  *  @brief  Setups the HW (defaults to 32V and 2A for calibration values)
- *  @param theWire the TwoWire object to use
  */
-void Adafruit_INA219::begin(TwoWire *theWire) {
-  _i2c = theWire;
+void Adafruit_INA219::begin(I2C_ID_t i2c) {
+  _i2c = i2c;
   init();
 }
 
@@ -369,7 +378,9 @@ void Adafruit_INA219::begin(TwoWire *theWire) {
  *  @brief  begin I2C and set up the hardware
  */
 void Adafruit_INA219::init() {
-  _i2c->begin();
+ 	_i2cConfig.freq = I2C_FREQ_100K;
+  I2C_Init(_i2c, _i2cConfig);
+
   // Set chip to large range config values to start
   setCalibration_32V_2A();
 }

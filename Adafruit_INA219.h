@@ -17,8 +17,7 @@
 #ifndef _LIB_ADAFRUIT_INA219_
 #define _LIB_ADAFRUIT_INA219_
 
-#include "Arduino.h"
-#include <Wire.h>
+#include "api_hal_i2c.h"
 
 /** default I2C address **/
 #define INA219_ADDRESS (0x40) // 1000000 (A0+A1=GND)
@@ -130,7 +129,7 @@ enum {
 class Adafruit_INA219 {
 public:
   Adafruit_INA219(uint8_t addr = INA219_ADDRESS);
-  void begin(TwoWire *theWire = &Wire);
+  void begin(I2C_ID_t i2c);
   void setCalibration_32V_2A();
   void setCalibration_32V_1A();
   void setCalibration_16V_400mA();
@@ -141,7 +140,8 @@ public:
   void powerSave(bool on);
 
 private:
-  TwoWire *_i2c;
+  I2C_ID_t _i2c;
+  I2C_Config_t _i2cConfig;
 
   uint8_t ina219_i2caddr;
   uint32_t ina219_calValue;
